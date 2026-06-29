@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>粒子ドローイング</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a0f;
+      overflow: hidden;
+      font-family: 'Helvetica Neue', sans-serif;
+      cursor: crosshair;
+    }
+    canvas { display: block; }
+
+    #ui {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      background: rgba(255,255,255,0.07);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 40px;
+      padding: 10px 20px;
+    }
+
+    .btn {
+      background: none;
+      border: 1px solid rgba(255,255,255,0.25);
+      color: #fff;
+      padding: 6px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .btn:hover, .btn.active {
+      background: rgba(255,255,255,0.15);
+      border-color: rgba(255,255,255,0.5);
+    }
+
+    .sep { width: 1px; height: 24px; background: rgba(255,255,255,0.15); }
+
+    label { color: rgba(255,255,255,0.6); font-size: 12px; }
+
+    input[type=range] {
+      width: 80px;
+      accent-color: #a78bfa;
+    }
+
+    #hint {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.3);
+      font-size: 13px;
+      pointer-events: none;
+      transition: opacity 1s;
+    }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hint">マウスを動かして描く / クリックで爆発</div>
+
+<div id="ui">
+  <button class="btn active" id="btnRainbow" onclick="setMode('rainbow')">虹色</button>
+  <button class="btn" id="btnFire"    onclick="setMode('fire')">炎</button>
+  <button class="btn" id="btnIce"     onclick="setMode('ice')">氷</button>
+  <button class="btn" id="btnMono"    onclick="setMode('mono')">白</button>
+  <div class="sep"></div>
+  <label>サイズ</label>
+  <input type="range" id="sizeSlider" min="1" max="5" step="0.5" value="2">
+  <div class="sep"></div>
+  <button class="btn" onclick="clearCanvas()">消去</button>
+  <button class="btn" onclick="saveImage()">保存</button>
+</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+let W, H;
+function resize() {
+  W = canvas.width  = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// --- State ---
+let particles = [];
+let mode = 'rainbow';
+let brushSize = 2;
+let mouse = { x: W/2, y: H/2, px: W/2, py: H/2, down: false };
+let hue = 0;
+let frame = 0;
+
+document.getElementById('sizeSlider').addEventListener('input', e => {
+  brushSize = +e.target.value;
+});
+
+// --- Color modes ---
+function getColor(age, maxAge) {
+  const life = 1 - age / maxAge;
+  switch (mode) {
+    case 'rainbow': return `hsla(${hue}, 90%, 65%, ${life})`;
+    case 'fire': {
+      const h = 20 + life * 30;
+      return `hsla(${h}, 100%, ${30 + life * 50}%, ${life})`;
+    }
+    case 'ice': {
+      const h = 190 + life * 40;
+      return `hsla(${h}, 90%, 60%, ${life})`;
+    }
+    case 'mono': return `rgba(255,255,255,${life * 0.8})`;
+  }
+}
+
+// --- Particle ---
+function spawnParticles(x, y, count, speed) {
+  for (let i = 0; i < count; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const s = speed * (0.4 + Math.random() * 0.6);
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * s,
+      vy: Math.sin(angle) * s,
+      size: brushSize * (0.5 + Math.random()),
+      hue,
+      age: 0,
+      maxAge: 40 + Math.random() * 60,
+    });
+  }
+}
+
+// --- Draw trail along mouse path ---
+function drawTrail() {
+  const dx = mouse.x - mouse.px;
+  const dy = mouse.y - mouse.py;
+  const dist = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.floor(dist / 4));
+  for (let i = 0; i < steps; i++) {
+    const t = i / steps;
+    const x = mouse.px + dx * t;
+    const y = mouse.py + dy * t;
+    spawnParticles(x, y, 3, brushSize * 1.5);
+  }
+}
+
+// --- Main loop ---
+function tick() {
+  requestAnimationFrame(tick);
+  frame++;
+  hue = (hue + 1.5) % 360;
+
+  // Fade background
+  ctx.fillStyle = 'rgba(10,10,15,0.18)';
+  ctx.fillRect(0, 0, W, H);
+
+  if (mouse.down || frame % 2 === 0 && Math.hypot(mouse.x - mouse.px, mouse.y - mouse.py) > 1) {
+    drawTrail();
+  }
+  mouse.px = mouse.x;
+  mouse.py = mouse.y;
+
+  // Update & draw particles
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.age++;
+    if (p.age > p.maxAge) { particles.splice(i, 1); continue; }
+
+    p.vy += 0.04; // gravity
+    p.vx *= 0.97;
+    p.vy *= 0.97;
+    p.x += p.vx;
+    p.y += p.vy;
+
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fillStyle = getColor(p.age, p.maxAge);
+    ctx.fill();
+  }
+}
+tick();
+
+// --- Events ---
+canvas.addEventListener('mousemove', e => {
+  mouse.px = mouse.x;
+  mouse.py = mouse.y;
+  mouse.x = e.clientX;
+  mouse.y = e.clientY;
+});
+
+canvas.addEventListener('mousedown', e => {
+  mouse.down = true;
+  spawnParticles(e.clientX, e.clientY, 80, brushSize * 5);
+});
+canvas.addEventListener('mouseup',   () => mouse.down = false);
+
+// Touch
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  const t = e.touches[0];
+  mouse.px = mouse.x; mouse.py = mouse.y;
+  mouse.x = t.clientX; mouse.y = t.clientY;
+}, { passive: false });
+canvas.addEventListener('touchstart', e => {
+  const t = e.touches[0];
+  mouse.down = true;
+  spawnParticles(t.clientX, t.clientY, 80, brushSize * 5);
+});
+canvas.addEventListener('touchend', () => mouse.down = false);
+
+// --- Controls ---
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.btn[id^=btn]').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn' + m.charAt(0).toUpperCase() + m.slice(1)).classList.add('active');
+}
+
+function clearCanvas() {
+  ctx.clearRect(0, 0, W, H);
+  particles = [];
+}
+
+function saveImage() {
+  const a = document.createElement('a');
+  a.download = 'particle-art.png';
+  a.href = canvas.toDataURL();
+  a.click();
+}
+
+// Hide hint after 4 seconds
+setTimeout(() => document.getElementById('hint').style.opacity = '0', 4000);
+</script>
+</body>
+</html>
