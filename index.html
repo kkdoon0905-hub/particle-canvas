@@ -2,6 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>粒子ドローイング</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -119,6 +120,7 @@ function getColor(age, maxAge) {
       return `hsla(${h}, 90%, 60%, ${life})`;
     }
     case 'mono': return `rgba(255,255,255,${life * 0.8})`;
+    default:     return `rgba(255,255,255,${life})`;
   }
 }
 
@@ -163,7 +165,7 @@ function tick() {
   ctx.fillStyle = 'rgba(10,10,15,0.18)';
   ctx.fillRect(0, 0, W, H);
 
-  if (mouse.down || frame % 2 === 0 && Math.hypot(mouse.x - mouse.px, mouse.y - mouse.py) > 1) {
+  if (mouse.down || (frame % 2 === 0 && Math.hypot(mouse.x - mouse.px, mouse.y - mouse.py) > 1)) {
     drawTrail();
   }
   mouse.px = mouse.x;
